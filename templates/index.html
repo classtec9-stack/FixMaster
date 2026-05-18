@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FixMaster | لوحة استقبال الأجهزة</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Cairo', sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 600px; background: white; margin: 30px auto; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        h1 { text-align: center; color: #1e3a8a; margin-bottom: 25px; font-weight: 700; }
+        .form-group { margin-bottom: 18px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #4b5563; }
+        input, textarea { width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; font-family: 'Cairo', sans-serif; font-size: 14px; }
+        textarea { resize: vertical; height: 100px; }
+        button { width: 100%; padding: 14px; background-color: #2563eb; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; font-family: 'Cairo', sans-serif; }
+        button:hover { background-color: #1d4ed8; }
+        .result-box { display: none; margin-top: 25px; padding: 20px; border-radius: 8px; border-right: 5px solid #10b981; background-color: #ecfdf5; }
+        .result-title { font-weight: bold; color: #065f46; margin-bottom: 5px; }
+        .ai-box { background: #eff6ff; border-right: 5px solid #3b82f6; padding: 15px; margin-top: 10px; border-radius: 6px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>نظام FixMaster الذكي 🛠️</h1>
+    <p style="text-align: center; color: #6b7280; margin-top: -15px; margin-bottom: 25px;">استقبال جهاز جديد وتشخيصه بالذكاء الاصطناعي</p>
+    
+    <form id="ticketForm">
+        <div class="form-group">
+            <label>اسم العميل:</label>
+            <input type="text" id="customer_name" placeholder="مثال: محمد الرويلي" required>
+        </div>
+        <div class="form-group">
+            <label>رقم الجوال:</label>
+            <input type="tel" id="customer_phone" placeholder="مثال: 0500000000" required>
+        </div>
+        <div class="form-group">
+            <label>موديل الجهاز:</label>
+            <input type="text" id="device_model" placeholder="مثال: iPhone 15 Pro Max" required>
+        </div>
+        <div class="form-group">
+            <label>وصف العطل (شكوى العميل):</label>
+            <textarea id="issue_description" placeholder="اكتب بالتفصيل ما الذي يشتكي منه العميل في الجهاز..." required></textarea>
+        </div>
+        <button type="submit">إصدار التذكرة وتشخيص الجهاز 🧠</button>
+    </form>
+
+    <div id="resultBox" class="result-box">
+        <div class="result-title">🎉 تم تسجيل الجهاز بنجاح في قاعدة البيانات!</div>
+        <p><strong>رقم تذكرة التتبع للعميل: </strong> <span id="ticketId" style="color: #2563eb; font-weight: bold; font-size: 18px;"></span></p>
+        <div class="ai-box">
+            <strong style="color: #1e40af;">🤖 تشخيص الذكاء الاصطناعي المبدئي:</strong>
+            <p id="aiAnalysis" style="margin: 5px 0 0 0; font-size: 14px; line-height: 1.6;"></p>
+        </div>
+    </div>
+</div>
+
+<script>
+    // كود تفاعلي لربط أزرار الصفحة بالسيرفر خلف الكواليس
+    document.getElementById('ticketForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const data = {
+            customer_name: document.getElementById('customer_name').value,
+            customer_phone: document.getElementById('customer_phone').value,
+            device_model: document.getElementById('device_model').value,
+            issue_description: document.getElementById('issue_description').value
+        };
+
+        const response = await fetch('/create-ticket/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+        
+        if(result.status === "success") {
+            document.getElementById('ticketId').innerText = result.ticket_id;
+            document.getElementById('aiAnalysis').innerText = result.ai_analysis;
+            document.getElementById('resultBox').style.display = 'block';
+            document.getElementById('ticketForm').reset();
+        } else {
+            alert("حدث خطأ أثناء الاتصال بالسيرفر!");
+        }
+    });
+</script>
+
+</body>
+</html>
