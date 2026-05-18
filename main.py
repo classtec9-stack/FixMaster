@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, Column, Integer, String
@@ -41,6 +41,8 @@ def get_db():
 
 # 3. تطبيق FastAPI وإعداد المسارات
 app = FastAPI()
+
+# تحديد المسار الصارم والآمن لقراءة المجلد داخل Render
 current_dir = os.path.dirname(os.path.abspath(__file__))
 templates = Jinja2Templates(directory=os.path.join(current_dir, "templates"))
 
