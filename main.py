@@ -1,4 +1,6 @@
-﻿from fastapi import FastAPI, Depends, HTTPException
+﻿from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -38,6 +40,7 @@ def get_db():
 
 # 3. تطبيق FastAPI
 app = FastAPI()
+templates = Jinja2Templates(directory="templates")
 
 class TicketCreate(BaseModel):
     customer_name: str
@@ -47,9 +50,9 @@ class TicketCreate(BaseModel):
 
 # --- المسارات (Endpoints) ---
 
-@app.get("/")
-def home():
-    return {"message": "سيرفر نظام FixMaster المدعوم بالذكاء الاصطناعي يعمل بنجاح!"}
+@app.get("/", response_class=HTMLResponse)
+def home(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 # مسار استقبال جهاز جديد مع تشخيص ذكي تلقائي
 @app.post("/create-ticket/")
