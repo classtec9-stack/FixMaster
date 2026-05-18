@@ -40,7 +40,9 @@ def get_db():
 
 # 3. تطبيق FastAPI
 app = FastAPI()
-templates = Jinja2Templates(directory="templates")
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+templates = Jinja2Templates(directory=os.path.join(current_dir, "templates"))
 
 class TicketCreate(BaseModel):
     customer_name: str
@@ -89,3 +91,7 @@ def create_new_ticket(ticket_data: TicketCreate, db: Session = Depends(get_db)):
         "ticket_id": new_ticket.id,
         "ai_analysis": new_ticket.ai_diagnosis
     }
+# مسار عرض صفحة التتبع للعملاء بالـ HTML
+@app.get("/search", response_class=HTMLResponse)
+def search_page(request: Request):
+    return templates.TemplateResponse("search.html", {"request": request})
