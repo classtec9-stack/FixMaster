@@ -15,7 +15,7 @@ Base = declarative_base()
 GEMINI_API_KEY = "AIzaSyAWcgdsX7Tr2pjWUlM6ZSxgMHHmg94DDz4"
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
-# --- تغيير اسم الجدول لـ tickets_v2 لإجبار قاعدة البيانات على التحديث الفوري ---
+# جدول التذاكر
 class DeviceTicket(Base):
     __tablename__ = "tickets_v2"
     id = Column(Integer, primary_key=True, index=True)
@@ -43,7 +43,7 @@ def get_db():
     finally:
         db.close()
 
-# حقن حساب الإدارة الافتراضي
+# حساب الإدارة الافتراضي
 db = SessionLocal()
 if not db.query(AdminUser).filter(AdminUser.username == "admin").first():
     admin_user = AdminUser(username="admin", password="password123")
@@ -246,7 +246,7 @@ def login_page():
             <p style="color:#64748b;">يرجى إدخال البيانات المعتمدة لفتح لوحة التحكم</p>
             <form id="loginForm">
                 <input type="text" id="username" placeholder="اسم المستخدم" required>
-                <input type="password" id="password" placeholder="كلمة运行" required>
+                <input type="password" id="password" placeholder="كلمة المرور" required>
                 <button type="submit">دخول النظام</button>
             </form>
         </div>
@@ -329,33 +329,38 @@ def admin_panel():
             async function loadTickets() {
                 try {
                     const response = await fetch('/api/tickets');
-                    if (!response.ok) { alert('فشل السيرفر في جلب البيانات، يرجى تسجيل جهاز جديد أولاً'); return; }
+                    if (!response.ok) { alert('فشل السيرفر في جلب البيانات'); return; }
                     allTickets = await response.json();
                     const tbody = document.querySelector('#ticketsTable tbody');
                     tbody.innerHTML = '';
 
                     allTickets.forEach(t => {
-                        const profit = (t.total_price || 0) - (t.part_cost || 0);
+                        const cost = t.part_cost || 0;
+                        const price = t.total_price || 0;
+                        const profit = price - cost;
+                        
                         const tr = document.createElement('tr');
+                        
+                        // بناء السطر بالاعتماد التام على دالات النصوص الآمنة لتفادي أخطاء الـ التداخل
                         tr.innerHTML = `
-                            <td><strong>#\${t.id}</strong></td>
-                            <td>\${t.customer_name}</td>
-                            <td>\${t.device_model}</td>
+                            <td><strong>#${t.id}</strong></td>
+                            <td>${t.customer_name}</td>
+                            <td>${t.device_model}</td>
                             <td>
-                                <select id="status-\${t.id}">
-                                    <option value="قيد الاستلام" \${t.status==='قيد الاستلام'?'selected':''}>قيد الاستلام</option>
-                                    <option value="جاري الفحص" \${t.status==='جاري الفحص'?'selected':''}>جاري الفحص</option>
-                                    <option value="جاري الإصلاح" \${t.status==='جاري الإصلاح'?'selected':''}>جاري الإصلاح</option>
-                                    <option value="جاهز للتسليم" \${t.status==='جاهز للتسليم'?'selected':''}>جاهز للتسليم</option>
-                                    <option value="تم التسليم والانتهاء" \${t.status==='تم التسليم والانتهاء'?'selected':''}>تم التسليم والانتهاء</option>
+                                <select id="status-${t.id}">
+                                    <option value="قيد الاستلام" ${t.status === "قيد الاستلام" ? "selected" : ""}>قيد الاستلام</option>
+                                    <option value="جاري الفحص" ${t.status === "جاري الفحص" ? "selected" : ""}>جاري الفحص</option>
+                                    <option value="جاري الإصلاح" ${t.status === "جاري الإصلاح" ? "selected" : ""}>جاري الإصلاح</option>
+                                    <option value="جاهز للتسليم" ${t.status === "جاهز للتسليم" ? "selected" : ""}>جاهز للتسليم</option>
+                                    <option value="تم التسليم والانتهاء" ${t.status === "تم التسليم والانتهاء" ? "selected" : ""}>تم التسليم والانتهاء</option>
                                 </select>
                             </td>
-                            <td><input type="number" class="table-input" id="cost-\${t.id}" value="\${t.part_cost || 0}"></td>
-                            <td><input type="number" class="table-input" id="price-\${t.id}" value="\${t.total_price || 0}"></td>
-                            <td><span class="badge" style="background:#dcfce7; color:#15803d;">\${profit} ريال</span></td>
+                            <td><input type="number" class="table-input" id="cost-${t.id}" value="${cost}"></td>
+                            <td><input type="number" class="table-input" id="price-${t.id}" value="${price}"></td>
+                            <td><span class="badge" style="background:#dcfce7; color:#15803d;">${profit} ريال</span></td>
                             <td>
-                                <button class="save-btn" onclick="saveChanges(\${t.id})">💾 حفظ</button>
-                                <button class="print-invoice-btn" onclick="printInvoice(\${t.id})">🧾 فاتورة</button>
+                                <button class="save-btn" onclick="saveChanges(${t.id})">💾 حفظ</button>
+                                <button class="print-invoice-btn" onclick="printInvoice(${t.id})">🧾 فاتورة</button>
                             </td>
                         `;
                         tbody.appendChild(tr);
@@ -364,9 +369,9 @@ def admin_panel():
             }
 
             async function saveChanges(ticketId) {
-                const newStatus = document.getElementById(`status-\${ticketId}`).value;
-                const newCost = parseFloat(document.getElementById(`cost-\${ticketId}`).value) || 0;
-                const newPrice = parseFloat(document.getElementById(`price-\${ticketId}`).value) || 0;
+                const newStatus = document.getElementById(`status-${ticketId}`).value;
+                const newCost = parseFloat(document.getElementById(`cost-${ticketId}`).value) || 0;
+                const newPrice = parseFloat(document.getElementById(`price-${ticketId}`).value) || 0;
 
                 try {
                     const response = await fetch('/api/update-status/' + ticketId, {
@@ -378,7 +383,7 @@ def admin_panel():
                         alert('تم حفظ البيانات المالية بنجاح');
                         loadTickets();
                     } else { alert('فشل حفظ البيانات الماليّة'); }
-                } catch (err) { alert('حدث عطل في الاتصال'); }
+                } catch (err) { alert('حدث عطل في الاتصال بالخلفية'); }
             }
 
             function printInvoice(ticketId) {
