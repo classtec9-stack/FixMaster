@@ -12,7 +12,7 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-GEMINI_API_KEY = "AIzaSyAWcgdsX7Tr2pjWUlM6ZSxgMHHmg94DDz4"
+GEMINI_API_KEY = "AIzaSyBAFQkjbKLMq9Nn0atPxd7Ihbb2nG1NvJM"
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 class DeviceTicket(Base):
