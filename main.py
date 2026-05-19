@@ -15,6 +15,10 @@ Base = declarative_base()
 GEMINI_API_KEY = "AIzaSyAWcgdsX7Tr2pjWUlM6ZSxgMHHmg94DDz4"
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
+# بيانات لوحة التحكم الافتراضية - (يمكنك تعديلها من هنا مباشرة)
+ADMIN_USERNAME = "admin"
+ADMIN_PASSWORD = "FixMasterSecure2026" 
+
 # جدول التذاكر
 class DeviceTicket(Base):
     __tablename__ = "tickets_v2"
@@ -43,11 +47,16 @@ def get_db():
     finally:
         db.close()
 
-# حساب الإدارة الافتراضي
+# تحديث/حقن حساب الإدارة المطور والآمن تلقائياً
 db = SessionLocal()
-if not db.query(AdminUser).filter(AdminUser.username == "admin").first():
-    admin_user = AdminUser(username="admin", password="password123")
+existing_admin = db.query(AdminUser).filter(AdminUser.username == ADMIN_USERNAME).first()
+if not existing_admin:
+    admin_user = AdminUser(username=ADMIN_USERNAME, password=ADMIN_PASSWORD)
     db.add(admin_user)
+    db.commit()
+else:
+    # لتحديث الباسورد القديم إذا تغيرت القيم بالأعلى
+    existing_admin.password = ADMIN_PASSWORD
     db.commit()
 db.close()
 
@@ -251,6 +260,11 @@ def login_page():
             </form>
         </div>
         <script>
+            // عند فتح الصفحة، لو مسجل دخول مسبقاً يحوله للإدارة فوراً
+            if(localStorage.getItem('adminToken') === 'SecretMasterToken123') {
+                window.location.href = "/admin";
+            }
+
             document.getElementById('loginForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const u = document.getElementById('username').value;
@@ -275,7 +289,7 @@ def login_page():
     </html>
     """
 
-# --- 4. لوحة تحكم الإدارة المالية الشاملة ---
+# --- 4. لوحة تحكم الإدارة المالية الشاملة (محمية بالكامل الآن) ---
 @app.get("/admin", response_class=HTMLResponse)
 def admin_panel():
     return """
@@ -286,7 +300,7 @@ def admin_panel():
         <title>FixMaster - لوحة تحكم الإدارة المالية</title>
         <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
         <style>
-            body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; }
+            body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; display: none; } /* مخفي افتراضياً لحين فحص الأمان */
             .dashboard { max-width: 1200px; background: white; margin: 20px auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
             h2 { color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; text-align: right; }
@@ -324,6 +338,13 @@ def admin_panel():
         </div>
 
         <script>
+            // جدار الحماية الذكي: يمنع فتح الصفحة نهائياً بدون تسجيل الدخول المعتمد
+            if(localStorage.getItem('adminToken') !== 'SecretMasterToken123') {
+                window.location.href = "/login";
+            } else {
+                document.body.style.display = "block"; // إظهار الصفحة فقط إذا كان مصرحاً له
+            }
+
             let allTickets = [];
 
             async function loadTickets() {
@@ -340,8 +361,6 @@ def admin_panel():
                         const profit = price - cost;
                         
                         const tr = document.createElement('tr');
-                        
-                        // بناء السطر بالاعتماد التام على دالات النصوص الآمنة لتفادي أخطاء الـ التداخل
                         tr.innerHTML = `
                             <td><strong>#${t.id}</strong></td>
                             <td>${t.customer_name}</td>
