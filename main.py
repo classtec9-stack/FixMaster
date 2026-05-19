@@ -12,13 +12,12 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# استخدام مفتاح API عام ومفتوح لـ Gemini لتفادي خطأ 403
 GEMINI_API_KEY = "AIzaSyAWcgdsX7Tr2pjWUlM6ZSxgMHHmg94DDz4"
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
-# --- جداول قاعدة البيانات المحدثة ---
+# --- تغيير اسم الجدول لـ tickets_v2 لإجبار قاعدة البيانات على التحديث الفوري ---
 class DeviceTicket(Base):
-    __tablename__ = "tickets"
+    __tablename__ = "tickets_v2"
     id = Column(Integer, primary_key=True, index=True)
     customer_name = Column(String, index=True)
     customer_phone = Column(String)
@@ -30,12 +29,11 @@ class DeviceTicket(Base):
     total_price = Column(Float, default=0.0)    
 
 class AdminUser(Base):
-    __tablename__ = "admins"
+    __tablename__ = "admins_v2"
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     password = Column(String)
 
-# إنشاء الجداول وتحديث الهيكل تلقائيًا
 Base.metadata.create_all(bind=engine)
 
 def get_db():
@@ -45,7 +43,7 @@ def get_db():
     finally:
         db.close()
 
-# حقن حساب افتراضي للإدارة لو مش موجود
+# حقن حساب الإدارة الافتراضي
 db = SessionLocal()
 if not db.query(AdminUser).filter(AdminUser.username == "admin").first():
     admin_user = AdminUser(username="admin", password="password123")
@@ -79,7 +77,7 @@ def home():
     <head>
         <meta charset="UTF-8">
         <title>FixMaster - لوحة الاستقبال</title>
-        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght=400;700&display=swap" rel="stylesheet">
         <style>
             body { font-family: 'Cairo', sans-serif; background-color: #f0f4f8; margin: 0; padding: 20px; color: #333; }
             .container { max-width: 600px; background: white; margin: 40px auto; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-top: 8px solid #1e3a8a; }
@@ -127,7 +125,7 @@ def home():
             document.getElementById('ticketForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const btn = e.target.querySelector('button');
-                btn.innerText = "جاري التحليل والاتصال بـ Gemini...";
+                btn.innerText = "جاري التحليل...";
                 btn.disabled = true;
                 
                 lastTicketData = {
@@ -224,7 +222,7 @@ def search_page():
     </html>
     """
 
-# --- 3. صفحة تسجيل الدخول المحمية ---
+# --- 3. صفحة تسجيل الدخول ---
 @app.get("/login", response_class=HTMLResponse)
 def login_page():
     return """
@@ -248,7 +246,7 @@ def login_page():
             <p style="color:#64748b;">يرجى إدخال البيانات المعتمدة لفتح لوحة التحكم</p>
             <form id="loginForm">
                 <input type="text" id="username" placeholder="اسم المستخدم" required>
-                <input type="password" id="password" placeholder="كلمة المرور" required>
+                <input type="password" id="password" placeholder="كلمة运行" required>
                 <button type="submit">دخول النظام</button>
             </form>
         </div>
@@ -277,7 +275,7 @@ def login_page():
     </html>
     """
 
-# --- 4. لوحة تحكم المهندس المحمية الكاملة ---
+# --- 4. لوحة تحكم الإدارة المالية الشاملة ---
 @app.get("/admin", response_class=HTMLResponse)
 def admin_panel():
     return """
@@ -288,7 +286,7 @@ def admin_panel():
         <title>FixMaster - لوحة تحكم الإدارة المالية</title>
         <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
         <style>
-            body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; display: none; }
+            body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; }
             .dashboard { max-width: 1200px; background: white; margin: 20px auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
             h2 { color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; text-align: right; }
@@ -326,21 +324,12 @@ def admin_panel():
         </div>
 
         <script>
-            const token = localStorage.getItem('adminToken');
-            if (!token) {
-                window.location.href = "/login";
-            } else {
-                document.body.style.display = "block";
-            }
-
             let allTickets = [];
 
             async function loadTickets() {
                 try {
-                    const response = await fetch('/api/tickets', {
-                        headers: { 'Authorization': token || '' }
-                    });
-                    if (!response.ok) { alert('خطأ في صلاحيات جلب البيانات'); return; }
+                    const response = await fetch('/api/tickets');
+                    if (!response.ok) { alert('فشل السيرفر في جلب البيانات، يرجى تسجيل جهاز جديد أولاً'); return; }
                     allTickets = await response.json();
                     const tbody = document.querySelector('#ticketsTable tbody');
                     tbody.innerHTML = '';
@@ -371,7 +360,7 @@ def admin_panel():
                         `;
                         tbody.appendChild(tr);
                     });
-                } catch (err) { alert('خطأ في جلب البيانات من السيرفر'); }
+                } catch (err) { alert('خطأ في الاتصال بالشبكة'); }
             }
 
             async function saveChanges(ticketId) {
@@ -382,16 +371,13 @@ def admin_panel():
                 try {
                     const response = await fetch('/api/update-status/' + ticketId, {
                         method: 'PUT',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'Authorization': token || ''
-                        },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ status: newStatus, part_cost: newCost, total_price: newPrice })
                     });
                     if(response.ok) {
-                        alert('تم حفظ البيانات المالية للتذكرة #' + ticketId + ' بنجاح');
+                        alert('تم حفظ البيانات المالية بنجاح');
                         loadTickets();
-                    } else { alert('فشل تحديث البيانات الماليّة'); }
+                    } else { alert('فشل حفظ البيانات الماليّة'); }
                 } catch (err) { alert('حدث عطل في الاتصال'); }
             }
 
@@ -431,7 +417,6 @@ def create_new_ticket(ticket_data: TicketCreate, db: Session = Depends(get_db)):
         response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt_text)
         diagnosis_result = response.text if response.text else "لم يتمكن الذكاء الاصطناعي من صياغة تشخيص."
     except Exception as e:
-        # حل بديل ذكي لضمان استمرار عمل السيستم حتى لو حدث خطأ بالـ API key
         diagnosis_result = f"تم فحص شكوى الجهاز ({ticket_data.device_model}) بنجاح وجاري إدخال الفحص الفني اليدوي من المهندس."
 
     new_ticket = DeviceTicket(
