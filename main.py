@@ -64,7 +64,7 @@ class LoginData(BaseModel):
     username: str
     password: str
 
-# --- 1. واجهة الموظف الرئيسية ---
+# --- 1. واجهة الموظف الرئيسية مع ميزة الطباعة الفورية ---
 @app.get("/", response_class=HTMLResponse)
 def home():
     return """
@@ -84,6 +84,8 @@ def home():
             button:hover { background-color: #1d4ed8; }
             .result { display: none; margin-top: 25px; padding: 20px; background-color: #eff6ff; border-left: 5px solid #3b82f6; border-radius: 6px; }
             .result h3 { margin-top: 0; color: #1e3a8a; }
+            .print-btn { background-color: #10b981; margin-top: 10px; }
+            .print-btn:hover { background-color: #059669; }
             .nav-links { display: flex; justify-content: space-between; margin-top: 20px; }
             .nav-links a { color: #2563eb; text-decoration: none; font-weight: bold; }
         </style>
@@ -105,6 +107,7 @@ def home():
             <div id="resultBox" class="result">
                 <h3>✅ تم تسجيل الجهاز بنجاح!</h3>
                 <p><strong>رقم التذكرة للتتبع:</strong> <span id="resId" style="font-size: 20px; color: #2563eb; font-weight: bold;"></span></p>
+                <button class="print-btn" onclick="printReceipt()">🖨️ طباعة إيصال استلام للعميل</button>
                 <p><strong>التشخيص المبدئي بالذكاء الاصطناعي (Gemini):</strong></p>
                 <p id="resAi" style="background: white; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0;"></p>
             </div>
@@ -114,24 +117,29 @@ def home():
             </div>
         </div>
         <script>
+            let lastTicketData = {};
+
             document.getElementById('ticketForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const btn = e.target.querySelector('button');
                 btn.innerText = "جاري التحليل والاتصال بـ Gemini...";
                 btn.disabled = true;
-                const data = {
+                
+                lastTicketData = {
                     customer_name: document.getElementById('customer_name').value,
                     customer_phone: document.getElementById('customer_phone').value,
                     device_model: document.getElementById('device_model').value,
                     issue_description: document.getElementById('issue_description').value
                 };
+
                 try {
                     const response = await fetch('/create-ticket/', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(data)
+                        body: JSON.stringify(lastTicketData)
                     });
                     const result = await response.json();
+                    lastTicketData.id = result.ticket_id;
                     document.getElementById('resId').innerText = result.ticket_id;
                     document.getElementById('resAi').innerText = result.ai_analysis;
                     document.getElementById('resultBox').style.display = 'block';
@@ -142,6 +150,40 @@ def home():
                     btn.disabled = false;
                 }
             });
+
+            function printReceipt() {
+                const printWindow = window.open('', '_blank', 'width=400,height=600');
+                printWindow.document.write(`
+                    <html>
+                    <head>
+                        <title>إيصال استلام</title>
+                        <style>
+                            body { font-family: 'Cairo', sans-serif; text-align: center; padding: 10px; direction: rtl; font-size: 14px; }
+                            .header { font-size: 18px; font-weight: bold; margin-bottom: 5px; }
+                            .divider { border-top: 1px dashed #000; margin: 10px 0; }
+                            .details { text-align: right; margin-bottom: 10px; }
+                            .ticket-id { font-size: 24px; font-weight: bold; margin: 10px 0; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="header">🛠️ مركز FixMaster للصيانة</div>
+                        <div>إيصال استلام جهاز</div>
+                        <div class="ticket-id">تذكرة رقم: #${lastTicketData.id}</div>
+                        <div class="divider"></div>
+                        <div class="details">
+                            <p><strong>العميل:</strong> ${lastTicketData.customer_name}</p>
+                            <p><strong>الجوال:</strong> ${lastTicketData.customer_phone}</p>
+                            <p><strong>الجهاز:</strong> ${lastTicketData.device_model}</p>
+                            <p><strong>العطل المذكور:</strong> ${lastTicketData.issue_description}</p>
+                        </div>
+                        <div class="divider"></div>
+                        <p style="font-size:11px;">الرجاء الاحتفاظ بالإيصال لتتبع حالة جهازك عبر موقعنا.</p>
+                        <script>window.print(); window.close();<\/script>
+                    </body>
+                    </html>
+                `);
+                printWindow.document.close();
+            }
         </script>
     </body>
     </html>
@@ -255,7 +297,7 @@ def login_page():
     </html>
     """
 
-# --- 4. لوحة تحكم المهندس المحمية ---
+# --- 4. لوحة تحكم المهندس المحمية مع إضافة أزرار الفواتير والطباعة ---
 @app.get("/admin", response_class=HTMLResponse)
 def admin_panel():
     return """
@@ -274,12 +316,13 @@ def admin_panel():
             th { background-color: #f8fafc; color: #475569; }
             select { padding: 6px; font-family: 'Cairo'; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; }
             .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+            .print-invoice-btn { background-color: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: 'Cairo'; font-weight: bold; }
         </style>
     </head>
     <body>
         <div class="dashboard">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h2>⚙️ لوحة تحكم المهندس المحمية</h2>
+                <h2>⚙️ لوحة تحكم المهندس والطباعة المالية</h2>
                 <button onclick="logout()" style="background:#ef4444; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; font-family:'Cairo';">تسجيل الخروج 🚪</button>
             </div>
             <table id="ticketsTable">
@@ -288,9 +331,9 @@ def admin_panel():
                         <th>رقم التذكرة</th>
                         <th>اسم العميل</th>
                         <th>الجهاز</th>
-                        <th>شكوى العطل</th>
                         <th>الحالة الحالية</th>
                         <th>تحديث الحالة</th>
+                        <th>الفاتورة</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -307,20 +350,21 @@ def admin_panel():
                 document.body.style.display = "block";
             }
 
+            let allTickets = [];
+
             async function loadTickets() {
                 try {
                     const response = await fetch('/api/tickets');
-                    const tickets = await response.json();
+                    allTickets = await response.json();
                     const tbody = document.querySelector('#ticketsTable tbody');
                     tbody.innerHTML = '';
 
-                    tickets.forEach(t => {
+                    allTickets.forEach(t => {
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
                             <td><strong>#${t.id}</strong></td>
                             <td>${t.customer_name}<br><small style="color:#64748b">${t.customer_phone}</small></td>
                             <td>${t.device_model}</td>
-                            <td style="max-width:250px; font-size:14px; color:#475569;">${t.issue_description}</td>
                             <td><span class="badge" style="background:#e0f2fe; color:#0369a1;">${t.status}</span></td>
                             <td>
                                 <select onchange="updateStatus(${t.id}, this.value)">
@@ -330,6 +374,9 @@ def admin_panel():
                                     <option value="جاهز للتسليم" ${t.status==='جاهز للتسليم'?'selected':''}>جاهز للتسليم</option>
                                     <option value="تم التسليم والانتهاء" ${t.status==='تم التسليم والانتهاء'?'selected':''}>تم التسليم والانتهاء</option>
                                 </select>
+                            </td>
+                            <td>
+                                <button class="print-invoice-btn" onclick="printInvoice(${t.id})">🧾 طباعة فواتير</button>
                             </td>
                         `;
                         tbody.appendChild(tr);
@@ -349,6 +396,45 @@ def admin_panel():
                         loadTickets();
                     } else { alert('فشل التحديث'); }
                 } catch (err) { alert('حدث عطل'); }
+            }
+
+            function printInvoice(ticketId) {
+                const ticket = allTickets.find(t => t.id === ticketId);
+                if(!ticket) return alert('التذكرة غير موجودة');
+
+                const printWindow = window.open('', '_blank', 'width=400,height=600');
+                printWindow.document.write(`
+                    <html>
+                    <head>
+                        <title>فاتورة نهائية</title>
+                        <style>
+                            body { font-family: 'Cairo', sans-serif; text-align: center; padding: 10px; direction: rtl; font-size: 14px; }
+                            .header { font-size: 18px; font-weight: bold; margin-bottom: 5px; }
+                            .invoice-title { font-size: 16px; margin: 10px 0; background: #eee; padding: 5px; font-weight: bold; }
+                            .divider { border-top: 1px dashed #000; margin: 10px 0; }
+                            .details { text-align: right; margin-bottom: 10px; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="header">🛠️ مركز FixMaster للصيانة</div>
+                        <div class="invoice-title">فاتورة صيانة نهائية</div>
+                        <p>رقم الفاتورة والتذكرة: #${ticket.id}</p>
+                        <div class="divider"></div>
+                        <div class="details">
+                            <p><strong>اسم العميل:</strong> ${ticket.customer_name}</p>
+                            <p><strong>الجوال:</strong> ${ticket.customer_phone}</p>
+                            <p><strong>موديل الجهاز:</strong> ${ticket.device_model}</p>
+                            <p><strong>حالة الجهاز:</strong> ${ticket.status}</p>
+                        </div>
+                        <div class="divider"></div>
+                        <p style="font-weight:bold; font-size:16px;">المبلغ الإجمالي المطلق: سيتم تحديده لاحقاً</p>
+                        <div class="divider"></div>
+                        <p style="font-size:11px;">نشكركم على ثقتكم بنا!</p>
+                        <script>window.print(); window.close();<\/script>
+                    </body>
+                    </html>
+                `);
+                printWindow.document.close();
             }
 
             function logout() {
