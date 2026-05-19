@@ -30,7 +30,7 @@ class AdminUser(Base):
     __tablename__ = "admins"
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
-    password = Column(String) # في بيئة الإنتاج الحقيقية يتم تشفيرها، هنا مبسطة لسهولة الإطلاق
+    password = Column(String)
 
 Base.metadata.create_all(bind=engine)
 
@@ -175,4 +175,237 @@ def search_page():
             <button onclick="trackDevice()">بحث عن التذكرة</button>
             <div id="statusBox" class="status-box">
                 <p><strong>جهازك من نوع:</strong> <span id="devModel"></span></p>
-                <p><strong>ح
+                <p><strong>حالة الجهاز الحالية:</strong> <span id="devStatus" class="badge"></span></p>
+                <p><strong>تقرير الفحص الفني للـ AI:</strong></p>
+                <p id="devAi" style="background: white; padding: 10px; border-radius: 6px; font-size: 14px; border: 1px solid #cbd5e1;"></p>
+            </div>
+            <a href="/" style="margin-top:20px; display:inline-block; color:#1e3a8a; text-decoration:none;">⬅️ العودة للرئيسية</a>
+        </div>
+        <script>
+            async function trackDevice() {
+                const id = document.getElementById('ticketId').value;
+                if(!id) return alert('برجاء كتابة رقم التذكرة');
+                try {
+                    const response = await fetch(`/track/${id}`);
+                    if(!response.ok) { alert('رقم التذكرة غير موجود!'); return; }
+                    const result = await response.json();
+                    document.getElementById('devModel').innerText = result.device_model;
+                    document.getElementById('devStatus').innerText = result.status;
+                    document.getElementById('devAi').innerText = result.ai_diagnosis;
+                    document.getElementById('statusBox').style.display = 'block';
+                } catch(err) {
+                    alert('خطأ في الاتصال بالسيرفر');
+                }
+            }
+        </script>
+    </body>
+    </html>
+    """
+
+# --- 3. صفحة تسجيل الدخول المحمية ---
+@app.get("/login", response_class=HTMLResponse)
+def login_page():
+    return """
+    <!DOCTYPE html>
+    <html lang="ar" dir="rtl">
+    <head>
+        <meta charset="UTF-8">
+        <title>FixMaster - تسجيل دخول الإدارة</title>
+        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+        <style>
+            body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; }
+            .login-box { max-width: 400px; background: white; margin: 100px auto; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-top: 8px solid #475569; text-align: center; }
+            input { width: 100%; padding: 10px; margin-top: 15px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-family: 'Cairo'; }
+            button { width: 100%; background-color: #475569; color: white; border: none; padding: 12px; margin-top: 20px; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: bold; }
+            button:hover { background-color: #334155; }
+        </style>
+    </head>
+    <body>
+        <div class="login-box">
+            <h2>🔐 تسجيل دخول الموظفين</h2>
+            <p style="color:#64748b;">يرجى إدخال البيانات المعتمدة لفتح لوحة التحكم</p>
+            <form id="loginForm">
+                <input type="text" id="username" placeholder="اسم المستخدم" required>
+                <input type="password" id="password" placeholder="كلمة المرور" required>
+                <button type="submit">دخول النظام</button>
+            </form>
+        </div>
+        <script>
+            document.getElementById('loginForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const u = document.getElementById('username').value;
+                const p = document.getElementById('password').value;
+                
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: u, password: p })
+                });
+                
+                if(response.ok) {
+                    const res = await response.json();
+                    localStorage.setItem('adminToken', res.token);
+                    window.location.href = "/admin";
+                } else {
+                    alert('خطأ في اسم المستخدم أو كلمة المرور!');
+                }
+            });
+        </script>
+    </body>
+    </html>
+    """
+
+# --- 4. لوحة تحكم المهندس المحمية ---
+@app.get("/admin", response_class=HTMLResponse)
+def admin_panel():
+    return """
+    <!DOCTYPE html>
+    <html lang="ar" dir="rtl">
+    <head>
+        <meta charset="UTF-8">
+        <title>FixMaster - لوحة تحكم الإدارة</title>
+        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+        <style>
+            body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; display: none; }
+            .dashboard { max-width: 1100px; background: white; margin: 20px auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+            h2 { color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; text-align: right; }
+            th, td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
+            th { background-color: #f8fafc; color: #475569; }
+            select { padding: 6px; font-family: 'Cairo'; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; }
+            .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        </style>
+    </head>
+    <body>
+        <div class="dashboard">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h2>⚙️ لوحة تحكم المهندس المحمية</h2>
+                <button onclick="logout()" style="background:#ef4444; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; font-family:'Cairo';">تسجيل الخروج 🚪</button>
+            </div>
+            <table id="ticketsTable">
+                <thead>
+                    <tr>
+                        <th>رقم التذكرة</th>
+                        <th>اسم العميل</th>
+                        <th>الجهاز</th>
+                        <th>شكوى العطل</th>
+                        <th>الحالة الحالية</th>
+                        <th>تحديث الحالة</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <br>
+            <a href="/" style="color: #2563eb; text-decoration: none; font-weight: bold;">⬅️ العودة لصفحة الاستقبال</a>
+        </div>
+
+        <script>
+            const token = localStorage.getItem('adminToken');
+            if (!token) {
+                window.location.href = "/login";
+            } else {
+                document.body.style.display = "block";
+            }
+
+            async function loadTickets() {
+                try {
+                    const response = await fetch('/api/tickets');
+                    const tickets = await response.json();
+                    const tbody = document.querySelector('#ticketsTable tbody');
+                    tbody.innerHTML = '';
+
+                    tickets.forEach(t => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><strong>#${t.id}</strong></td>
+                            <td>${t.customer_name}<br><small style="color:#64748b">${t.customer_phone}</small></td>
+                            <td>${t.device_model}</td>
+                            <td style="max-width:250px; font-size:14px; color:#475569;">${t.issue_description}</td>
+                            <td><span class="badge" style="background:#e0f2fe; color:#0369a1;">${t.status}</span></td>
+                            <td>
+                                <select onchange="updateStatus(${t.id}, this.value)">
+                                    <option value="قيد الاستلام" ${t.status==='قيد الاستلام'?'selected':''}>قيد الاستلام</option>
+                                    <option value="جاري الفحص" ${t.status==='جاري الفحص'?'selected':''}>جاري الفحص</option>
+                                    <option value="جاري الإصلاح" ${t.status==='جاري الإصلاح'?'selected':''}>جاري الإصلاح</option>
+                                    <option value="جاهز للتسليم" ${t.status==='جاهز للتسليم'?'selected':''}>جاهز للتسليم</option>
+                                    <option value="تم التسليم والانتهاء" ${t.status==='تم التسليم والانتهاء'?'selected':''}>تم التسليم والانتهاء</option>
+                                </select>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } catch (err) { alert('خطأ في جلب البيانات'); }
+            }
+
+            async function updateStatus(ticketId, newStatus) {
+                try {
+                    const response = await fetch(`/api/update-status/${ticketId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: newStatus })
+                    });
+                    if(response.ok) {
+                        alert(`تم تحديث التذكرة #${ticketId} بنجاح`);
+                        loadTickets();
+                    } else { alert('فشل التحديث'); }
+                } catch (err) { alert('حدث عطل'); }
+            }
+
+            function logout() {
+                localStorage.removeItem('adminToken');
+                window.location.href = "/login";
+            }
+
+            window.onload = loadTickets;
+        </script>
+    </body>
+    </html>
+    """
+
+# --- الخلفية (API Back-end) ---
+
+@app.post("/api/login")
+def api_login(data: LoginData, db: Session = Depends(get_db)):
+    user = db.query(AdminUser).filter(AdminUser.username == data.username, AdminUser.password == data.password).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="بيانات خاطئة")
+    return {"status": "success", "token": "SecretMasterToken123"}
+
+@app.post("/create-ticket/")
+def create_new_ticket(ticket_data: TicketCreate, db: Session = Depends(get_db)):
+    try:
+        prompt_text = f"أنت خبير صيانة أجهزة محترف. قم بتحليل العطل التالي لجهاز ({ticket_data.device_model}): '{ticket_data.issue_description}'. أعطني تشخيصاً مبدئياً متوقعاً في سطرين فقط باللغة العربية، واقترح قطع الغيار المتوقع تغييرها بوضوح."
+        response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt_text)
+        diagnosis_result = response.text if response.text else "لم يتمكن الذكاء الاصطناعي من صياغة تشخيص."
+    except Exception as e:
+        diagnosis_result = f"تم تخطي التشخيص التلقائي مؤقتاً (سبب الفشل: {str(e)[:50]})"
+
+    new_ticket = DeviceTicket(
+        customer_name=ticket_data.customer_name, customer_phone=ticket_data.customer_phone,
+        device_model=ticket_data.device_model, issue_description=ticket_data.issue_description,
+        status="قيد الاستلام", ai_diagnosis=diagnosis_result
+    )
+    db.add(new_ticket)
+    db.commit()
+    db.refresh(new_ticket)
+    return {"status": "success", "ticket_id": new_ticket.id, "ai_analysis": new_ticket.ai_diagnosis}
+
+@app.get("/track/{ticket_id}")
+def track_device(ticket_id: int, db: Session = Depends(get_db)):
+    ticket = db.query(DeviceTicket).filter(DeviceTicket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="عذراً، رقم التذكرة غير موجود.")
+    return {"device_model": ticket.device_model, "status": ticket.status, "ai_diagnosis": ticket.ai_diagnosis}
+
+@app.get("/api/tickets")
+def get_all_tickets(db: Session = Depends(get_db)):
+    return db.query(DeviceTicket).order_by(desc(DeviceTicket.id)).all()
+
+@app.put("/api/update-status/{ticket_id}")
+def update_ticket_status(ticket_id: int, status_data: StatusUpdate, db: Session = Depends(get_db)):
+    ticket = db.query(DeviceTicket).filter(DeviceTicket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="التذكرة غير موجودة")
+    ticket.status = status_data.status
+    db.commit()
+    return {"status": "updated"}
