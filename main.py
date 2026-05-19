@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import create_engine, Column, Integer, String, desc
+from sqlalchemy import create_engine, Column, Integer, String, Float, desc
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from pydantic import BaseModel
@@ -15,7 +15,7 @@ Base = declarative_base()
 GEMINI_API_KEY = "AIzaSyAWcgdsX7Tr2pjWUlM6ZSxgMHHmg94DDz4"
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
-# --- جداول قاعدة البيانات ---
+# --- جداول قاعدة البيانات المحدثة بالخانات المالية ---
 class DeviceTicket(Base):
     __tablename__ = "tickets"
     id = Column(Integer, primary_key=True, index=True)
@@ -25,6 +25,8 @@ class DeviceTicket(Base):
     issue_description = Column(String)
     status = Column(String, default="قيد الاستلام")
     ai_diagnosis = Column(String, default="لم يتم الفحص بعد")
+    part_cost = Column(Float, default=0.0)      # تكلفة قطع الغيار
+    total_price = Column(Float, default=0.0)    # السعر النهائي المطلوب من العميل
 
 class AdminUser(Base):
     __tablename__ = "admins"
@@ -59,12 +61,14 @@ class TicketCreate(BaseModel):
 
 class StatusUpdate(BaseModel):
     status: str
+    part_cost: float = 0.0
+    total_price: float = 0.0
 
 class LoginData(BaseModel):
     username: str
     password: str
 
-# --- 1. واجهة الموظف الرئيسية مع ميزة الطباعة الفورية ---
+# --- 1. واجهة الموظف الرئيسية ---
 @app.get("/", response_class=HTMLResponse)
 def home():
     return """
@@ -218,6 +222,7 @@ def search_page():
             <div id="statusBox" class="status-box">
                 <p><strong>جهازك من نوع:</strong> <span id="devModel"></span></p>
                 <p><strong>حالة الجهاز الحالية:</strong> <span id="devStatus" class="badge"></span></p>
+                <p><strong>التكلفة النهائية المطلوبة:</strong> <span id="devPrice" style="color:#16a34a; font-weight:bold;"></span> ريال</p>
                 <p><strong>تقرير الفحص الفني للـ AI:</strong></p>
                 <p id="devAi" style="background: white; padding: 10px; border-radius: 6px; font-size: 14px; border: 1px solid #cbd5e1;"></p>
             </div>
@@ -233,6 +238,7 @@ def search_page():
                     const result = await response.json();
                     document.getElementById('devModel').innerText = result.device_model;
                     document.getElementById('devStatus').innerText = result.status;
+                    document.getElementById('devPrice').innerText = result.total_price;
                     document.getElementById('devAi').innerText = result.ai_diagnosis;
                     document.getElementById('statusBox').style.display = 'block';
                 } catch(err) {
@@ -297,7 +303,7 @@ def login_page():
     </html>
     """
 
-# --- 4. لوحة تحكم المهندس المحمية مع إضافة أزرار الفواتير والطباعة ---
+# --- 4. لوحة تحكم المهندس المحمية مع إدارة الأسعار التنافسية والأرباح ---
 @app.get("/admin", response_class=HTMLResponse)
 def admin_panel():
     return """
@@ -305,24 +311,25 @@ def admin_panel():
     <html lang="ar" dir="rtl">
     <head>
         <meta charset="UTF-8">
-        <title>FixMaster - لوحة تحكم الإدارة</title>
+        <title>FixMaster - لوحة تحكم الإدارة المالية</title>
         <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
         <style>
             body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; display: none; }
-            .dashboard { max-width: 1100px; background: white; margin: 20px auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+            .dashboard { max-width: 1200px; background: white; margin: 20px auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
             h2 { color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; text-align: right; }
             th, td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
             th { background-color: #f8fafc; color: #475569; }
-            select { padding: 6px; font-family: 'Cairo'; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; }
+            select, input.table-input { padding: 6px; font-family: 'Cairo'; border-radius: 4px; border: 1px solid #cbd5e1; width: 90px; }
             .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
             .print-invoice-btn { background-color: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: 'Cairo'; font-weight: bold; }
+            .save-btn { background-color: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: 'Cairo'; }
         </style>
     </head>
     <body>
         <div class="dashboard">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h2>⚙️ لوحة تحكم المهندس والطباعة المالية</h2>
+                <h2>⚙️ لوحة الإدارة المالية الشاملة للأرباح</h2>
                 <button onclick="logout()" style="background:#ef4444; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; font-family:'Cairo';">تسجيل الخروج 🚪</button>
             </div>
             <table id="ticketsTable">
@@ -331,9 +338,11 @@ def admin_panel():
                         <th>رقم التذكرة</th>
                         <th>اسم العميل</th>
                         <th>الجهاز</th>
-                        <th>الحالة الحالية</th>
-                        <th>تحديث الحالة</th>
-                        <th>الفاتورة</th>
+                        <th>الحالة</th>
+                        <th>تكلفة القطع (ريال)</th>
+                        <th>سعر العميل (ريال)</th>
+                        <th>صافي الربح</th>
+                        <th>إجراءات</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -360,14 +369,14 @@ def admin_panel():
                     tbody.innerHTML = '';
 
                     allTickets.forEach(t => {
+                        const profit = t.total_price - t.part_cost;
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
                             <td><strong>#${t.id}</strong></td>
-                            <td>${t.customer_name}<br><small style="color:#64748b">${t.customer_phone}</small></td>
+                            <td>${t.customer_name}</td>
                             <td>${t.device_model}</td>
-                            <td><span class="badge" style="background:#e0f2fe; color:#0369a1;">${t.status}</span></td>
                             <td>
-                                <select onchange="updateStatus(${t.id}, this.value)">
+                                <select id="status-${t.id}">
                                     <option value="قيد الاستلام" ${t.status==='قيد الاستلام'?'selected':''}>قيد الاستلام</option>
                                     <option value="جاري الفحص" ${t.status==='جاري الفحص'?'selected':''}>جاري الفحص</option>
                                     <option value="جاري الإصلاح" ${t.status==='جاري الإصلاح'?'selected':''}>جاري الإصلاح</option>
@@ -375,8 +384,12 @@ def admin_panel():
                                     <option value="تم التسليم والانتهاء" ${t.status==='تم التسليم والانتهاء'?'selected':''}>تم التسليم والانتهاء</option>
                                 </select>
                             </td>
+                            <td><input type="number" class="table-input" id="cost-${t.id}" value="${t.part_cost}"></td>
+                            <td><input type="number" class="table-input" id="price-${t.id}" value="${t.total_price}"></td>
+                            <td><span class="badge" style="background:#dcfce7; color:#15803d;">${profit} ريال</span></td>
                             <td>
-                                <button class="print-invoice-btn" onclick="printInvoice(${t.id})">🧾 طباعة فواتير</button>
+                                <button class="save-btn" onclick="saveChanges(${t.id})">💾 حفظ</button>
+                                <button class="print-invoice-btn" onclick="printInvoice(${t.id})">🧾 فاتورة</button>
                             </td>
                         `;
                         tbody.appendChild(tr);
@@ -384,15 +397,19 @@ def admin_panel():
                 } catch (err) { alert('خطأ في جلب البيانات'); }
             }
 
-            async function updateStatus(ticketId, newStatus) {
+            async function saveChanges(ticketId) {
+                const newStatus = document.getElementById(`status-${ticketId}`).value;
+                const newCost = parseFloat(document.getElementById(`cost-${ticketId}`).value) || 0;
+                const newPrice = parseFloat(document.getElementById(`price-${ticketId}`).value) || 0;
+
                 try {
                     const response = await fetch(`/api/update-status/${ticketId}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ status: newStatus })
+                        body: JSON.stringify({ status: newStatus, part_cost: newCost, total_price: newPrice })
                     });
                     if(response.ok) {
-                        alert(`تم تحديث التذكرة #${ticketId} بنجاح`);
+                        alert(`تم حفظ البيانات المالية للتذكرة #${ticketId} بنجاح`);
                         loadTickets();
                     } else { alert('فشل التحديث'); }
                 } catch (err) { alert('حدث عطل'); }
@@ -427,7 +444,7 @@ def admin_panel():
                             <p><strong>حالة الجهاز:</strong> ${ticket.status}</p>
                         </div>
                         <div class="divider"></div>
-                        <p style="font-weight:bold; font-size:16px;">المبلغ الإجمالي المطلق: سيتم تحديده لاحقاً</p>
+                        <p style="font-weight:bold; font-size:16px; color:#16a34a;">المبلغ المطلوب للسداد: ${ticket.total_price} ريال</p>
                         <div class="divider"></div>
                         <p style="font-size:11px;">نشكركم على ثقتكم بنا!</p>
                         <script>window.print(); window.close();<\/script>
@@ -469,7 +486,7 @@ def create_new_ticket(ticket_data: TicketCreate, db: Session = Depends(get_db)):
     new_ticket = DeviceTicket(
         customer_name=ticket_data.customer_name, customer_phone=ticket_data.customer_phone,
         device_model=ticket_data.device_model, issue_description=ticket_data.issue_description,
-        status="قيد الاستلام", ai_diagnosis=diagnosis_result
+        status="قيد الاستلام", ai_diagnosis=diagnosis_result, part_cost=0.0, total_price=0.0
     )
     db.add(new_ticket)
     db.commit()
@@ -481,7 +498,7 @@ def track_device(ticket_id: int, db: Session = Depends(get_db)):
     ticket = db.query(DeviceTicket).filter(DeviceTicket.id == ticket_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="عذراً، رقم التذكرة غير موجود.")
-    return {"device_model": ticket.device_model, "status": ticket.status, "ai_diagnosis": ticket.ai_diagnosis}
+    return {"device_model": ticket.device_model, "status": ticket.status, "ai_diagnosis": ticket.ai_diagnosis, "total_price": ticket.total_price}
 
 @app.get("/api/tickets")
 def get_all_tickets(db: Session = Depends(get_db)):
@@ -493,5 +510,7 @@ def update_ticket_status(ticket_id: int, status_data: StatusUpdate, db: Session 
     if not ticket:
         raise HTTPException(status_code=404, detail="التذكرة غير موجودة")
     ticket.status = status_data.status
+    ticket.part_cost = status_data.part_cost
+    ticket.total_price = status_data.total_price
     db.commit()
     return {"status": "updated"}
