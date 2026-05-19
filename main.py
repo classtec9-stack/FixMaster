@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Depends, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import create_engine, Column, Integer, String, desc
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -15,6 +15,7 @@ Base = declarative_base()
 GEMINI_API_KEY = "AIzaSyAWcgdsX7Tr2pjWUlM6ZSxgMHHmg94DDz4"
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
+# --- جداول قاعدة البيانات ---
 class DeviceTicket(Base):
     __tablename__ = "tickets"
     id = Column(Integer, primary_key=True, index=True)
@@ -25,6 +26,12 @@ class DeviceTicket(Base):
     status = Column(String, default="قيد الاستلام")
     ai_diagnosis = Column(String, default="لم يتم الفحص بعد")
 
+class AdminUser(Base):
+    __tablename__ = "admins"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    password = Column(String) # في بيئة الإنتاج الحقيقية يتم تشفيرها، هنا مبسطة لسهولة الإطلاق
+
 Base.metadata.create_all(bind=engine)
 
 def get_db():
@@ -33,6 +40,14 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# حقن حساب افتراضي للإدارة لو مش موجود
+db = SessionLocal()
+if not db.query(AdminUser).filter(AdminUser.username == "admin").first():
+    admin_user = AdminUser(username="admin", password="password123")
+    db.add(admin_user)
+    db.commit()
+db.close()
 
 app = FastAPI()
 
@@ -45,7 +60,11 @@ class TicketCreate(BaseModel):
 class StatusUpdate(BaseModel):
     status: str
 
-# --- 1. واجهة الموظف الرئيسية (استقبال الأجهزة) ---
+class LoginData(BaseModel):
+    username: str
+    password: str
+
+# --- 1. واجهة الموظف الرئيسية ---
 @app.get("/", response_class=HTMLResponse)
 def home():
     return """
@@ -91,7 +110,7 @@ def home():
             </div>
             <div class="nav-links">
                 <a href="/search">🔍 صفحة تتبع العملاء</a>
-                <a href="/admin" style="color: #475569;">⚙️ لوحة تحكم المهندس</a>
+                <a href="/login" style="color: #475569;">⚙️ لوحة تحكم الإدارة (قفل آمن)</a>
             </div>
         </div>
         <script>
@@ -156,180 +175,4 @@ def search_page():
             <button onclick="trackDevice()">بحث عن التذكرة</button>
             <div id="statusBox" class="status-box">
                 <p><strong>جهازك من نوع:</strong> <span id="devModel"></span></p>
-                <p><strong>حالة الجهاز الحالية:</strong> <span id="devStatus" class="badge"></span></p>
-                <p><strong>تقرير الفحص الفني للـ AI:</strong></p>
-                <p id="devAi" style="background: white; padding: 10px; border-radius: 6px; font-size: 14px; border: 1px solid #cbd5e1;"></p>
-            </div>
-            <a href="/" style="margin-top:20px; display:inline-block; color:#1e3a8a; text-decoration:none;">⬅️ العودة للرئيسية</a>
-        </div>
-        <script>
-            async function trackDevice() {
-                const id = document.getElementById('ticketId').value;
-                if(!id) return alert('برجاء كتابة رقم التذكرة');
-                try {
-                    const response = await fetch(`/track/${id}`);
-                    if(!response.ok) { alert('رقم التذكرة غير موجود!'); return; }
-                    const result = await response.json();
-                    document.getElementById('devModel').innerText = result.device_model;
-                    document.getElementById('devStatus').innerText = result.status;
-                    document.getElementById('devAi').innerText = result.ai_diagnosis;
-                    document.getElementById('statusBox').style.display = 'block';
-                } catch(err) {
-                    alert('خطأ في الاتصال بالسيرفر');
-                }
-            }
-        </script>
-    </body>
-    </html>
-    """
-
-# --- 3. الصفحة الجديدة: لوحة تحكم المهندس وإدارة الحالات (/admin) ---
-@app.get("/admin", response_class=HTMLResponse)
-def admin_panel():
-    return """
-    <!DOCTYPE html>
-    <html lang="ar" dir="rtl">
-    <head>
-        <meta charset="UTF-8">
-        <title>FixMaster - لوحة تحكم الإدارة</title>
-        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
-        <style>
-            body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; }
-            .dashboard { max-width: 1100px; background: white; margin: 20px auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-            h2 { color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; text-align: right; }
-            th, td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
-            th { background-color: #f8fafc; color: #475569; }
-            select { padding: 6px; font-family: 'Cairo'; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; }
-            .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
-        </style>
-    </head>
-    <body>
-        <div class="dashboard">
-            <h2>⚙️ لوحة تحكم المهندس - إدارة وتحديث الأجهزة</h2>
-            <p>من هنا يمكنك متابعة كل الأجهزة وتغيير حالتها فوراً لتظهر للعميل.</p>
-            <table id="ticketsTable">
-                <thead>
-                    <tr>
-                        <th>رقم التذكرة</th>
-                        <th>اسم العميل</th>
-                        <th>الجهاز</th>
-                        <th>شكوى العطل</th>
-                        <th>الحالة الحالية</th>
-                        <th>تحديث الحالة</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr><td colspan="6" style="text-align:center;">جاري تحميل التذاكر من قاعدة البيانات...</td></tr>
-                </tbody>
-            </table>
-            <br>
-            <a href="/" style="color: #2563eb; text-decoration: none; font-weight: bold;">⬅️ العودة لصفحة الاستقبال</a>
-        </div>
-
-        <script>
-            async function loadTickets() {
-                try {
-                    const response = await fetch('/api/tickets');
-                    const tickets = await response.json();
-                    const tbody = document.querySelector('#ticketsTable tbody');
-                    tbody.innerHTML = '';
-
-                    if(tickets.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">لا توجد أجهزة مسجلة حالياً.</td></tr>';
-                        return;
-                    }
-
-                    tickets.forEach(t => {
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td><strong>#${t.id}</strong></td>
-                            <td>${t.customer_name}<br><small style="color:#64748b">${t.customer_phone}</small></td>
-                            <td>${t.device_model}</td>
-                            <td style="max-width:250px; font-size:14px; color:#475569;">${t.issue_description}</td>
-                            <td><span class="badge" style="background:#e0f2fe; color:#0369a1;">${t.status}</span></td>
-                            <td>
-                                <select onchange="updateStatus(${t.id}, this.value)">
-                                    <option value="قيد الاستلام" ${t.status==='قيد الاستلام'?'selected':''}>قيد الاستلام</option>
-                                    <option value="جاري الفحص" ${t.status==='جاري الفحص'?'selected':''}>جاري الفحص</option>
-                                    <option value="جاري الإصلاح" ${t.status==='جاري الإصلاح'?'selected':''}>جاري الإصلاح</option>
-                                    <option value="جاهز للتسليم" ${t.status==='جاهز للتسليم'?'selected':''}>جاهز للتسليم</option>
-                                    <option value="تم التسليم والانتهاء" ${t.status==='تم التسليم والانتهاء'?'selected':''}>تم التسليم والانتهاء</option>
-                                </select>
-                            </td>
-                        `;
-                        tbody.appendChild(tr);
-                    });
-                } catch (err) {
-                    alert('خطأ في جلب البيانات');
-                }
-            }
-
-            async function updateStatus(ticketId, newStatus) {
-                try {
-                    const response = await fetch(`/api/update-status/${ticketId}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ status: newStatus })
-                    });
-                    if(response.ok) {
-                        alert(`تم تحديث التذكرة #${ticketId} بنجاح إلى: ${newStatus}`);
-                        loadTickets(); // إعادة إنعاش الجدول
-                    } else {
-                        alert('فشل تحديث الحالة');
-                    }
-                } catch (err) {
-                    alert('حدث عطل بالاتصال');
-                }
-            }
-
-            // تحميل البيانات عند فتح الصفحة فوراً
-            window.onload = loadTickets;
-        </script>
-    </body>
-    </html>
-    """
-
-# --- المسارات البرمجية الخلفية (API Endpoints) ---
-
-@app.post("/create-ticket/")
-def create_new_ticket(ticket_data: TicketCreate, db: Session = Depends(get_db)):
-    try:
-        prompt_text = f"أنت خبير صيانة أجهزة محترف. قم بتحليل العطل التالي لجهاز ({ticket_data.device_model}): '{ticket_data.issue_description}'. أعطني تشخيصاً مبدئياً متوقعاً في سطرين فقط باللغة العربية، واقترح قطع الغيار المتوقع تغييرها بوضوح."
-        response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt_text)
-        diagnosis_result = response.text if response.text else "لم يتمكن الذكاء الاصطناعي من صياغة تشخيص."
-    except Exception as e:
-        diagnosis_result = f"تم تخطي التشخيص التلقائي مؤقتاً (سبب الفشل: {str(e)[:50]})"
-
-    new_ticket = DeviceTicket(
-        customer_name=ticket_data.customer_name, customer_phone=ticket_data.customer_phone,
-        device_model=ticket_data.device_model, issue_description=ticket_data.issue_description,
-        status="قيد الاستلام", ai_diagnosis=diagnosis_result
-    )
-    db.add(new_ticket)
-    db.commit()
-    db.refresh(new_ticket)
-    return {"status": "success", "ticket_id": new_ticket.id, "ai_analysis": new_ticket.ai_diagnosis}
-
-# جلب بيانات تذكرة واحدة للعميل
-@app.get("/track/{ticket_id}")
-def track_device(ticket_id: int, db: Session = Depends(get_db)):
-    ticket = db.query(DeviceTicket).filter(DeviceTicket.id == ticket_id).first()
-    if not ticket:
-        raise HTTPException(status_code=404, detail="عذراً، رقم التذكرة غير موجود.")
-    return {"device_model": ticket.device_model, "status": ticket.status, "ai_diagnosis": ticket.ai_diagnosis}
-
-# جلب كل التذاكر مرتبة من الأحدث للأقدم للوحة الإدارة
-@app.get("/api/tickets")
-def get_all_tickets(db: Session = Depends(get_db)):
-    return db.query(DeviceTicket).order_by(desc(DeviceTicket.id)).all()
-
-# تحديث حالة الجهاز بطلب من المهندس
-@app.put("/api/update-status/{ticket_id}")
-def update_ticket_status(ticket_id: int, status_data: StatusUpdate, db: Session = Depends(get_db)):
-    ticket = db.query(DeviceTicket).filter(DeviceTicket.id == ticket_id).first()
-    if not ticket:
-        raise HTTPException(status_code=404, detail="التذكرة غير موجودة")
-    ticket.status = status_data.status
-    db.commit()
-    return {"status": "updated"}
+                <p><strong>ح
